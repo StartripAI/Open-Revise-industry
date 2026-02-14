@@ -1,84 +1,111 @@
 # Open Revise Industry
 
-Evidence-gated DOCX revision toolkit for high-stakes Q&A documents.
+Evidence-gated revision infrastructure for high-stakes DOCX Q&A.
 
-`revise` 不是写作润色器，而是“有证据才改”的文档修订流水线：
-- 只在有可核验 fulltext 证据时修改；
-- 修改必须是实质性变更（数据、指标、口径、关键词、关键措辞）；
-- 每条修改都可追溯到来源（`Q -> source`）。
+## Screen 1: Product Positioning
+Ship fact-safe revisions with audit-grade traceability.
+
+`Open Revise Industry` is built for teams that cannot afford speculative edits. It turns document revision into an evidence workflow:
+- verify first, revise second;
+- block unverified claims before they enter final copy;
+- produce tracked changes and machine-readable audit artifacts in one run.
+
+## Screen 2: Product Value
+What this product does in production:
+
+- `Evidence Gate`: hard fail on required-source misses.
+- `Sub-question Decomposition`: MECE-style claim breakdown before edits.
+- `Materiality-first Revision`: update only substantive changes (data, metrics, thresholds, key terms, risk language).
+- `DOCX Native Output`: writes tracked changes (`w:del` + `w:ins`) instead of plain rewrites.
+- `Audit Trail`: exports Q-to-source mappings, change audit CSV, and run manifests.
+- `Run Governance`: isolated run directories, lifecycle retention, and deletion manifests.
+
+What this product intentionally does not do:
+- prose polishing;
+- cosmetic rewrites;
+- unsupported factual expansion.
+
+## Screen 3: Technical Posture
+System design principles:
+
+- `No Guessing`: no evidence, no factual revision.
+- `Fulltext-first`: abstracts alone are insufficient for core claim updates.
+- `Deterministic Artifacts`: each run emits fixed output contracts.
+- `Reviewability`: every revised claim is traceable to source evidence.
+- `Operational Safety`: run-scoped writes, manifest logging, retention policy enforcement.
 
 ## North Star
-- 不猜测，不编造。
-- 先证据，后修订。
-- 证据不足时明确写出：`not available in currently verifiable fulltext`。
+- Do not guess.
+- Evidence first, revision second.
+- If evidence is missing, explicitly write: `not available in currently verifiable fulltext`.
 
-## 什么时候应该修订
-- 新数据出现或原数据更新。
-- 关键指标、统计口径、阈值发生变化。
-- 监管/官方公告更新导致结论变化。
-- 关键词、术语、定义发生变化。
-- 关键风险措辞、适应症、限制条件变化。
+## What Counts as a Valid Revision
+- New data appears or existing data changes.
+- Key metrics, thresholds, or definitions change.
+- Official announcements or regulatory updates change conclusions.
+- Critical keywords, terms, or framing change.
+- Material risk language or scope constraints change.
 
-## 什么时候不应该修订
-- 仅做扩写。
-- 仅做文风美化。
-- 仅做同义改写但不改变事实含义。
+## What Does Not Count
+- Expansion for style.
+- Cosmetic rewriting.
+- Synonym swaps that do not change facts.
 
-## 适用行业与文档
-- 法律/合规：法规 FAQ、合同问答、申报/审查问答、政策解释稿。
-- 咨询/企业：尽调 FAQ、投标问答、管理层 Q&A、对外口径 FAQ。
-- 医学/科研：论文 FAQ、审稿回复问答、临床/药政问答。
-- IR/公共事务：财报问答、风险披露问答、舆情回应 FAQ。
-- 技术/运营：产品合规 FAQ、安全 FAQ、SOP 问答。
+## Target Industries and Document Types
+- Legal/Compliance: regulatory FAQs, contract Q&A, filing/review Q&A, policy interpretation notes.
+- Consulting/Enterprise: diligence FAQs, bid Q&A, management Q&A, external messaging FAQs.
+- Medical/Research: paper FAQs, reviewer response Q&A, clinical/regulatory Q&A.
+- IR/Public Affairs: earnings Q&A, risk disclosure Q&A, public response FAQs.
+- Tech/Operations: product compliance FAQs, security FAQs, SOP Q&A.
 
-当前主目标文档格式：`.docx`（带修订痕迹输出）。
-证据源支持：网页公告、PDF、论文/Poster 等可核验 fulltext。
+Primary output format: `.docx` with tracked changes.
+Evidence inputs: verifiable fulltext from announcements, PDFs, papers, posters, and similar sources.
 
-## 方法论（Top-down）
-1. 定义问题与 scope：明确用户问题、受众、时点、不可改边界。
-2. MECE 拆分：把每个目标问题分解为互斥且穷尽的子问题。
-3. 证据门禁：逐子问题检查 required source 与 fulltext 可得性。
-4. 修订决策：仅对证据充分的目标执行改写。
-5. DOCX 落地：以 tracked changes 写入（`w:del` + `w:ins`），并保留脚注来源。
-6. 审计导出：生成 source gate 报告与完整 Q-source 映射。
+## Method (Top-down)
+1. Define problem and scope: clarify user intent, audience, time anchor, and no-change boundaries.
+2. Decompose with MECE: split each target question into mutually exclusive and collectively exhaustive sub-questions.
+3. Run source gate: verify required sources and fulltext evidence for each sub-question.
+4. Decide revisions: revise only targets with sufficient evidence.
+5. Write DOCX changes: apply tracked changes (`w:del` + `w:ins`) and preserve source footnotes.
+6. Export audit trail: generate source gate report and full Q-to-source mapping.
 
 ## Quick Start
-要求：
+Requirements:
 - Python 3.10+
 - `pypdf`
 
-安装依赖：
+Install dependency:
 ```bash
 python3 -m pip install pypdf
 ```
 
-推荐入口（run 级治理）：
+Recommended entrypoint (run-scoped governance):
 ```bash
 python3 scripts/run_revise_pipeline_v2.py \
   --input-docx "/absolute/path/to/original.docx"
 ```
 
-运行后自动执行：
-1. source gate 检查
-2. docx 修订
-3. q-source map 导出
-4. manifest 写入与 `run_index` 更新
+This automatically runs:
+1. source gate check
+2. DOCX revision
+3. Q-source map export
+4. manifest writing and run index update
 
-## 企业网络/证书链
-若你在企业网络中遇到 TLS/证书问题，可指定 CA bundle：
+## Enterprise TLS / Certificate Chain
+If your network requires enterprise root certificates, provide a CA bundle:
 ```bash
 python3 scripts/run_revise_pipeline_v2.py \
   --input-docx "/absolute/path/to/original.docx" \
   --ca-bundle "/absolute/path/to/corp_root_ca.pem"
 ```
 
-仅用于排障（不推荐长期使用）：
+Diagnostic-only switch (not recommended for normal use):
 - `--allow-insecure-tls`
 
-## 产物与审计
-每次运行写入：`runs/<run_id>/`
+## Outputs and Auditability
+Each run writes into: `runs/<run_id>/`
 
-固定关键产物：
+Core artifacts:
 - `source_gate_report_<run_id>.json`
 - `revision_change_audit_<run_id>.csv`
 - `q_source_map_<run_id>.csv`
@@ -87,26 +114,26 @@ python3 scripts/run_revise_pipeline_v2.py \
 - `deleted_docx_manifest_<run_id>.tsv`
 - `artifact_manifest_<run_id>.tsv`
 
-全局索引：
+Global index:
 - `reports/run_index.tsv`
 
-## 目录结构
+## Repository Structure
 | Path | Purpose |
 |---|---|
-| `scripts/revise_docx.py` | 主修订脚本（tracked changes + footnotes） |
-| `scripts/check_revise_sources.py` | Source gate（required/optional 检查） |
-| `scripts/run_revise_pipeline.py` | 兼容旧入口（显式输入输出） |
-| `scripts/run_revise_pipeline_v2.py` | 推荐入口（run_id 目录、manifest、index） |
-| `scripts/build_q_source_map.py` | 生成完整 Q-source CSV |
-| `scripts/query_q_source.py` | 查询单题来源 |
-| `scripts/update_run_index.py` | 更新 `reports/run_index.tsv` |
-| `scripts/housekeeping.py` | 热冷分层与过期清理 |
-| `config/revise_sources.json` | Source gate 规则 |
-| `config/source_registry.yaml` | 来源注册快照 |
-| `docs/SOP_endpoint_extraction_standard.md` | SOP 基线 |
+| `scripts/revise_docx.py` | Main DOCX reviser (tracked changes + footnotes) |
+| `scripts/check_revise_sources.py` | Source gate checker (required/optional checks) |
+| `scripts/run_revise_pipeline.py` | Legacy pipeline entrypoint (explicit in/out paths) |
+| `scripts/run_revise_pipeline_v2.py` | Recommended entrypoint (run_id dirs, manifests, index) |
+| `scripts/build_q_source_map.py` | Export full Q-to-source CSV |
+| `scripts/query_q_source.py` | Query sources for one question |
+| `scripts/update_run_index.py` | Update `reports/run_index.tsv` |
+| `scripts/housekeeping.py` | Hot/cold retention and cleanup |
+| `config/revise_sources.json` | Source gate rules |
+| `config/source_registry.yaml` | Source registry snapshot |
+| `docs/SOP_endpoint_extraction_standard.md` | SOP baseline |
 
-## 核心策略
-- Fulltext-first。
-- Abstract-only 不足以支持核心结论改写。
-- required source 任一失败，默认阻断修订。
-- 所有修改必须可审计、可回溯、可复核。
+## Policy Summary
+- Fulltext-first.
+- Abstract-only evidence is insufficient for core claim revisions.
+- Any required-source failure blocks revision by default.
+- Every change must be auditable, traceable, and reviewable.
