@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Runtime outputs (keep structure placeholders)
+/runs/*
+!/runs/.gitkeep
+
+/archive/*
+!/archive/.gitkeep
+
+/reports/*
+!/reports/run_index.tsv

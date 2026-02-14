@@ -1,0 +1,80 @@
+{
+  "required_sources": {
+    "jco2025": {
+      "type": "url_text",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40448572/?format=pubmed",
+      "must_include": [
+        "16.2 months",
+        "14.2 months",
+        "P = .039",
+        "13.9 months",
+        "11.5 months",
+        "P = .022"
+      ]
+    },
+    "poster2235": {
+      "type": "remote_pdf",
+      "url": "https://assets.novocure.biz/docs/2025-10/2025_ESMO_Babiker_P3%20usage%20CA19-9_POS.pdf",
+      "must_include": [
+        "17.1 vs 14.2",
+        "p=0.003",
+        "16.1",
+        "14.1",
+        "0.78",
+        "0.021"
+      ]
+    },
+    "esmogi_qol_presentation": {
+      "type": "local_pdf",
+      "path": "/Users/alfred/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_3mjzo92w051t22_597a/msg/file/2026-02/ESMO-GI-2025 PANOVA-3 QoL presentation July2.pdf",
+      "must_include": [
+        "15.2",
+        "9.1",
+        "0.027",
+        "10.1",
+        "7.4",
+        "0.003",
+        "9.3",
+        "6.7",
+        "0.014"
+      ]
+    },
+    "fda_approval": {
+      "type": "url_text",
+      "url": "https://www.fda.gov/news-events/press-announcements/fda-approves-first-its-kind-device-treat-pancreatic-cancer",
+      "must_include": [
+        "February 12, 2026",
+        "first-of-its-kind device",
+        "Optune Pax",
+        "gemcitabine and nab-paclitaxel",
+        "approximately two months"
+      ]
+    }
+  },
+  "optional_sources": {
+    "esmogi_press": {
+      "type": "url_text",
+      "url": "https://www.novocure.com/novocure-present-final-secondary-endpoint-data-phase-3-panova-3-trial-tumor-treating-fields-concomitant",
+      "must_include": [
+        "secondary endpoint",
+        "PANOVA-3"
+      ]
+    },
+    "poster2036": {
+      "type": "remote_pdf",
+      "url": "https://assets.novocure.biz/docs/2025-10/2025_ESMO_Babiker_P3%20Qol_POS.pdf",
+      "must_include": [
+        "QoL",
+        "pain"
+      ]
+    },
+    "poster707_official": {
+      "type": "remote_pdf",
+      "url": "https://assets.novocure.biz/docs/2026-01/2026_ASCOGI_Babiker_P3%20subgroups%20based%20on%20sex%20age%20BMI_POS.pdf",
+      "must_include": [
+        "subgroup",
+        "BMI"
+      ]
+    }
+  }
+}

@@ -1,0 +1,237 @@
+registry_version: '1.0'
+sources:
+- source_id: pubmed
+  source_type: literature
+  tier: S
+  country: US
+  institution_tier: ''
+  reliability_rule: indexed_biomedical_reference
+  alias_keywords: []
+- source_id: europe_pmc
+  source_type: literature
+  tier: S
+  country: EU
+  institution_tier: ''
+  reliability_rule: indexed_biomedical_reference
+  alias_keywords: []
+- source_id: pmc
+  source_type: literature
+  tier: S
+  country: US
+  institution_tier: ''
+  reliability_rule: fulltext_biomedical_archive
+  alias_keywords:
+  - pmc
+  - pubmed central
+- source_id: openalex
+  source_type: literature
+  tier: A
+  country: INTL
+  institution_tier: ''
+  reliability_rule: cross-indexed_scholarly_metadata
+  alias_keywords: []
+- source_id: crossref
+  source_type: literature
+  tier: A
+  country: INTL
+  institution_tier: ''
+  reliability_rule: doi_metadata_registry
+  alias_keywords: []
+- source_id: nccn
+  source_type: practice
+  tier: S
+  country: US
+  institution_tier: ''
+  reliability_rule: major_clinical_guideline
+  alias_keywords:
+  - nccn
+- source_id: esmo
+  source_type: practice
+  tier: S
+  country: EU
+  institution_tier: ''
+  reliability_rule: major_clinical_guideline
+  alias_keywords:
+  - esmo
+- source_id: asco
+  source_type: practice
+  tier: S
+  country: US
+  institution_tier: ''
+  reliability_rule: major_clinical_guideline
+  alias_keywords:
+  - asco
+- source_id: csco
+  source_type: practice
+  tier: A
+  country: CN
+  institution_tier: ''
+  reliability_rule: major_clinical_guideline
+  alias_keywords:
+  - csco
+- source_id: fda
+  source_type: regulatory
+  tier: S
+  country: US
+  institution_tier: ''
+  reliability_rule: regulatory_review_source
+  alias_keywords:
+  - fda
+- source_id: ema
+  source_type: regulatory
+  tier: S
+  country: EU
+  institution_tier: ''
+  reliability_rule: regulatory_review_source
+  alias_keywords:
+  - ema
+- source_id: pmda
+  source_type: regulatory
+  tier: S
+  country: JP
+  institution_tier: ''
+  reliability_rule: regulatory_review_source
+  alias_keywords:
+  - pmda
+- source_id: clinicaltrials_gov
+  source_type: regulatory
+  tier: A
+  country: US
+  institution_tier: ''
+  reliability_rule: trial_registry_result_source
+  alias_keywords:
+  - clinicaltrials.gov
+  - nct
+- source_id: mayo_clinic
+  source_type: institution
+  tier: A
+  country: US
+  institution_tier: top
+  reliability_rule: top_cancer_center
+  alias_keywords:
+  - mayo clinic
+- source_id: md_anderson
+  source_type: institution
+  tier: A
+  country: US
+  institution_tier: top
+  reliability_rule: top_cancer_center
+  alias_keywords:
+  - md anderson
+- source_id: cleveland_clinic
+  source_type: institution
+  tier: A
+  country: US
+  institution_tier: top
+  reliability_rule: top_cancer_center
+  alias_keywords:
+  - cleveland clinic
+- source_id: msk
+  source_type: institution
+  tier: A
+  country: US
+  institution_tier: top
+  reliability_rule: top_cancer_center
+  alias_keywords:
+  - memorial sloan
+  - msk
+- source_id: dana_farber
+  source_type: institution
+  tier: A
+  country: US
+  institution_tier: top
+  reliability_rule: top_cancer_center
+  alias_keywords:
+  - dana-farber
+  - dana farber
+- source_id: sheba
+  source_type: institution
+  tier: A
+  country: IL
+  institution_tier: top
+  reliability_rule: top_tertiary_center
+  alias_keywords:
+  - sheba
+- source_id: rambam
+  source_type: institution
+  tier: A
+  country: IL
+  institution_tier: top
+  reliability_rule: top_tertiary_center
+  alias_keywords:
+  - rambam
+- source_id: assuta
+  source_type: institution
+  tier: B
+  country: IL
+  institution_tier: high
+  reliability_rule: specialty_hospital
+  alias_keywords:
+  - assuta
+- source_id: karolinska
+  source_type: institution
+  tier: A
+  country: SE
+  institution_tier: top
+  reliability_rule: top_university_hospital
+  alias_keywords:
+  - karolinska
+- source_id: uclh
+  source_type: institution
+  tier: A
+  country: UK
+  institution_tier: top
+  reliability_rule: top_university_hospital
+  alias_keywords:
+  - uclh
+  - university college london hospitals
+- source_id: gustave_roussy
+  source_type: institution
+  tier: A
+  country: FR
+  institution_tier: top
+  reliability_rule: top_cancer_center
+  alias_keywords:
+  - gustave roussy
+- source_id: pumch
+  source_type: institution
+  tier: A
+  country: CN
+  institution_tier: top
+  reliability_rule: top_national_center
+  alias_keywords:
+  - peking union medical college hospital
+  - pumch
+- source_id: west_china
+  source_type: institution
+  tier: A
+  country: CN
+  institution_tier: top
+  reliability_rule: top_national_center
+  alias_keywords:
+  - west china hospital
+- source_id: sjtu
+  source_type: institution
+  tier: A
+  country: CN
+  institution_tier: top
+  reliability_rule: top_academic_center
+  alias_keywords:
+  - shanghai jiao tong
+- source_id: fudan
+  source_type: institution
+  tier: A
+  country: CN
+  institution_tier: top
+  reliability_rule: top_academic_center
+  alias_keywords:
+  - fudan
+- source_id: sun_yat_sen
+  source_type: institution
+  tier: A
+  country: CN
+  institution_tier: top
+  reliability_rule: top_academic_center
+  alias_keywords:
+  - sun yat-sen
+  - sysu

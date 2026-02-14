@@ -1,0 +1,7 @@
+{
+  "grobid": {
+    "mode": "remote_first_local_fallback",
+    "default_remote_url": "https://kermitt2-grobid.hf.space",
+    "notes": "Used by upstream retrieval pipeline for PDF-to-XML parsing. Keep this config in revise for reproducible source parsing behavior."
+  }
+}
