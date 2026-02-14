@@ -2,37 +2,26 @@
 
 Evidence-gated revision infrastructure for high-stakes DOCX Q&A.
 
-## Screen 1: Product Positioning
-Ship fact-safe revisions with audit-grade traceability.
+## User-first
+For operators and content owners, the outcome is simple:
+- no speculative edits in final documents;
+- only material revisions go live (data, metrics, key terms, risk language);
+- every updated answer is source-traceable;
+- delivery remains in native `.docx` with tracked changes.
 
-`Open Revise Industry` is built for teams that cannot afford speculative edits. It turns document revision into an evidence workflow:
-- verify first, revise second;
-- block unverified claims before they enter final copy;
-- produce tracked changes and machine-readable audit artifacts in one run.
-
-## Screen 2: Product Value
-What this product does in production:
-
+## Developer-first
+For builders and integrators, the system is explicit and deterministic:
 - `Evidence Gate`: hard fail on required-source misses.
-- `Sub-question Decomposition`: MECE-style claim breakdown before edits.
-- `Materiality-first Revision`: update only substantive changes (data, metrics, thresholds, key terms, risk language).
-- `DOCX Native Output`: writes tracked changes (`w:del` + `w:ins`) instead of plain rewrites.
-- `Audit Trail`: exports Q-to-source mappings, change audit CSV, and run manifests.
-- `Run Governance`: isolated run directories, lifecycle retention, and deletion manifests.
+- `MECE Decomposition`: claim/sub-question split before revision.
+- `DOCX Revision Engine`: tracked changes via `w:del` + `w:ins`.
+- `Audit Contracts`: fixed artifacts for gate report, change audit, and Q-source map.
+- `Run Governance`: isolated run directories, manifest logging, and retention controls.
 
-What this product intentionally does not do:
+## Product Boundaries
+This product intentionally does not do:
 - prose polishing;
 - cosmetic rewrites;
 - unsupported factual expansion.
-
-## Screen 3: Technical Posture
-System design principles:
-
-- `No Guessing`: no evidence, no factual revision.
-- `Fulltext-first`: abstracts alone are insufficient for core claim updates.
-- `Deterministic Artifacts`: each run emits fixed output contracts.
-- `Reviewability`: every revised claim is traceable to source evidence.
-- `Operational Safety`: run-scoped writes, manifest logging, retention policy enforcement.
 
 ## North Star
 - Do not guess.
