@@ -1,6 +1,6 @@
-# Open Revise Industry
+# OpenRevise for all Industry
 
-Evidence-gated revision infrastructure for high-stakes DOCX Q&A.
+"OpenRevise" updates documents from high-confidence public evidence (papers, announcements, etc.), accepts sources in any format (PDF, image, doc, link), and outputs auditable tracked changes.
 
 ## User-first
 For operators and content owners, the outcome is simple:
