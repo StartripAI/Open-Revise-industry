@@ -38,6 +38,12 @@ def main() -> int:
         default=Path(__file__).resolve().parents[1] / "config" / "revise_sources.json",
     )
     parser.add_argument(
+        "--patch-spec",
+        type=Path,
+        required=True,
+        help="JSON spec containing generic revision patches and source footnotes.",
+    )
+    parser.add_argument(
         "--source-report-json",
         type=Path,
         default=None,
@@ -84,6 +90,8 @@ def main() -> int:
 
     if args.run_id is not None and not is_valid_run_id(args.run_id):
         parser.error(f"Invalid --run-id format: {args.run_id}")
+    if not args.patch_spec.exists():
+        parser.error(f"patch spec not found: {args.patch_spec}")
 
     if args.run_dir is not None and args.run_id is None:
         parser.error("--run-id is required when --run-dir is provided")
@@ -132,6 +140,8 @@ def main() -> int:
         str(args.input_docx),
         "--output-docx",
         str(args.output_docx),
+        "--patch-spec",
+        str(args.patch_spec),
         "--author",
         args.author,
         "--date",

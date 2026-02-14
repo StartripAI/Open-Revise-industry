@@ -1,0 +1,17 @@
+{
+  "footnote_sources": {
+    "src_reg_notice": "Source: Regulatory authority notice URL ... verified on YYYY-MM-DD.",
+    "src_journal": "Source: Journal paper citation ... verified on YYYY-MM-DD."
+  },
+  "patches": [
+    {
+      "label": "Q12",
+      "anchor": "Original answer sentence to be replaced.",
+      "anchor_match": "exact",
+      "question_anchor": "Question text for Q12",
+      "question_match": "contains",
+      "replacement": "Updated answer backed by evidence. [[fn:src_reg_notice]][[fn:src_journal]]",
+      "reason": "New official data changed key metric wording."
+    }
+  ]
+}

@@ -51,7 +51,8 @@ python3 -m pip install pypdf
 Recommended entrypoint (run-scoped governance):
 ```bash
 python3 scripts/run_revise_pipeline_v2.py \
-  --input-docx "/absolute/path/to/original.docx"
+  --input-docx "/absolute/path/to/original.docx" \
+  --patch-spec "config/revision_patch_spec_template.json"
 ```
 
 This automatically runs:
@@ -59,6 +60,14 @@ This automatically runs:
 2. DOCX revision
 3. Q-source map export
 4. manifest writing and run index update
+
+Revision plans are supplied via JSON patch spec:
+- template: `config/revision_patch_spec_template.json`
+- each patch must include anchor, replacement, reason, and source footnote refs.
+
+Source gate configuration:
+- default config path: `config/revise_sources.json`
+- define at least one `required_sources` entry (empty required sources are treated as gate failure).
 
 ## Enterprise TLS / Certificate Chain
 If your network requires enterprise root certificates, provide a CA bundle:
@@ -98,6 +107,7 @@ Global index:
 | `scripts/update_run_index.py` | Update `reports/run_index.tsv` |
 | `scripts/housekeeping.py` | Hot/cold retention and cleanup |
 | `config/revise_sources.json` | Source gate rules |
+| `config/revision_patch_spec_template.json` | Generic revision patch spec template |
 | `config/source_registry.yaml` | Source registry snapshot |
 | `docs/SOP_endpoint_extraction_standard.md` | SOP baseline |
 

@@ -6,6 +6,8 @@ Maintain global run index.
 from __future__ import annotations
 
 import argparse
+import fcntl
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List
 
@@ -32,37 +34,50 @@ RUN_INDEX_FIELDS: List[str] = [
 ]
 
 
+@contextmanager
+def _locked_index(index_path: Path):
+    lock_path = index_path.with_suffix(index_path.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def upsert_run_record(index_path: Path, record: Dict[str, str]) -> None:
-    rows = read_tsv(index_path)
-    index: Dict[str, Dict[str, str]] = {}
-    order: List[str] = []
-    for row in rows:
-        rid = row.get("run_id", "")
+    with _locked_index(index_path):
+        rows = read_tsv(index_path)
+        index: Dict[str, Dict[str, str]] = {}
+        order: List[str] = []
+        for row in rows:
+            rid = row.get("run_id", "")
+            if not rid:
+                continue
+            index[rid] = row
+            order.append(rid)
+
+        rid = record.get("run_id", "")
         if not rid:
-            continue
-        index[rid] = row
-        order.append(rid)
+            raise ValueError("run_id is required in run index record")
+        if rid in index:
+            merged = dict(index[rid])
+            merged.update(record)
+            index[rid] = merged
+        else:
+            index[rid] = {k: record.get(k, "") for k in RUN_INDEX_FIELDS}
+            order.append(rid)
 
-    rid = record.get("run_id", "")
-    if not rid:
-        raise ValueError("run_id is required in run index record")
-    if rid in index:
-        merged = dict(index[rid])
-        merged.update(record)
-        index[rid] = merged
-    else:
-        index[rid] = {k: record.get(k, "") for k in RUN_INDEX_FIELDS}
-        order.append(rid)
+        output: List[Dict[str, str]] = []
+        seen = set()
+        for key in order:
+            if key in seen or key not in index:
+                continue
+            seen.add(key)
+            output.append(index[key])
 
-    output: List[Dict[str, str]] = []
-    seen = set()
-    for key in order:
-        if key in seen or key not in index:
-            continue
-        seen.add(key)
-        output.append(index[key])
-
-    write_tsv(index_path, RUN_INDEX_FIELDS, output)
+        write_tsv(index_path, RUN_INDEX_FIELDS, output)
 
 
 def main() -> int:
@@ -117,4 +132,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

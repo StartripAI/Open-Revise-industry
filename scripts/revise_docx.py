@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Apply tracked revisions to PANOVA-3 FAQ DOCX using direct OOXML editing.
+Apply evidence-gated tracked revisions to DOCX using direct OOXML editing.
 
-This script updates selected answer paragraphs with w:del/w:ins revisions and
-adds new footnotes for official sources.
+The revision plan is provided via --patch-spec JSON so the tool is domain-agnostic
+across legal, consulting, medical, IR, and operations workflows.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import json
 import re
 import shutil
 import sys
@@ -19,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 import xml.etree.ElementTree as ET
+
 from run_artifact_utils import is_valid_run_id
 
 
@@ -40,234 +42,186 @@ class ParagraphPatch:
     replacement: str
     label: str
     reason: str
+    anchor_match: str = "contains"
+    question_anchor: str | None = None
+    question_match: str = "contains"
 
 
-FOOTNOTE_SOURCES: Dict[str, str] = {
-    "jco2025": (
-        "Source: Babiker HM, Picozzi V, Chandana SR, et al. PANOVA-3 phase III study. "
-        "J Clin Oncol. 2025;43(21):2350-2360. doi:10.1200/JCO-25-00746. PMID:40448572. "
-        "URL: https://pubmed.ncbi.nlm.nih.gov/40448572/ . "
-        "Location: PubMed format (AB - RESULTS paragraph). "
-        "Original excerpt: \"16.2 months ... v 14.2 months ... HR 0.82 ... P = .039\"; "
-        "\"distant PFS ... 13.9 months ... v 11.5 months ... HR 0.74 ... P = .022\". "
-        "Verified on: 2026-02-14."
-    ),
-    "poster2235": (
-        "Source: Babiker HM, et al. ESMO 2025 Poster 2235P "
-        "(TTFields device usage + CA 19-9 post-hoc analyses). "
-        "URL: https://assets.novocure.biz/docs/2025-10/2025_ESMO_Babiker_P3%20usage%20CA19-9_POS.pdf . "
-        "Location: Poster page 1, Figure 3 (device usage) and Table 2/Figure 4 (CA 19-9 subgroups). "
-        "Original excerpt: \"17.1 vs 14.2 months, HR 0.71 ... p=0.003 (Figure 3A)\"; "
-        "\"16.1 ... 14.1 ... HR 0.78 ... p=0.021\"; "
-        "\"18.6 ... 14.7 ... HR 0.74 ... p=0.028\". "
-        "Verified on: 2026-02-14."
-    ),
-    "esmogi_qol_presentation": (
-        "Source: Macarulla T. PANOVA-3 pain and quality-of-life outcomes in LA-PAC, "
-        "ESMO GI 2025 presentation (July 2, 2025), user-provided local full file. "
-        "Location: /Users/alfred/Library/Containers/com.tencent.xinWeChat/Data/Documents/"
-        "xwechat_files/wxid_3mjzo92w051t22_597a/msg/file/2026-02/ESMO-GI-2025 PANOVA-3 QoL presentation July2.pdf ; "
-        "Page 7 (OS and pain-free survival), page 9 (global health status), "
-        "page 12 (pain and pancreatic pain), page 13 (time to first opioid use). "
-        "Original excerpt: \"16.2 ... 14.2 ... HR = 0.82\"; "
-        "\"15.2 ... 9.1 ... HR = 0.74\"; "
-        "\"10.1 ... 7.4 ... HR = 0.70\"; "
-        "\"14.7 ... 10.2 ... HR = 0.69\"; "
-        "\"9.3 ... 6.7 ... HR = 0.73\"; "
-        "\"7.1 ... 5.4 ... HR = 0.80\". "
-        "Verified on: 2026-02-14."
-    ),
-    "fda_approval": (
-        "Source: U.S. FDA press announcement. "
-        "URL: https://www.fda.gov/news-events/press-announcements/fda-approves-first-its-kind-device-treat-pancreatic-cancer . "
-        "Location: Published date block and main body paragraph on approval basis. "
-        "Original excerpt: \"February 12, 2026\"; "
-        "\"approved a first-of-its-kind device\"; "
-        "\"gemcitabine and nab-paclitaxel ... improved Overall Survival by approximately two months\". "
-        "Verified on: 2026-02-14."
-    ),
-}
-
-
-PATCHES: List[ParagraphPatch] = [
-    ParagraphPatch(
-        label="Q3",
-        anchor="主要研究终点是总生存期，指从随机化开始至因任何原因引起死亡的时间。",
-        replacement=(
-            "主要研究终点是总生存期（OS），指从随机化开始至因任何原因引起死亡的时间。"
-            "次要研究终点包括无进展生存期、局部无进展生存期、客观缓解率、1年生存率、"
-            "生活质量、疼痛相关终点、无痛生存期、可切除率以及安全性和耐受性。"
-            "其中疼痛、QoL、依从性和CA 19-9相关事后分析结果已公布。[[fn:jco2025]][[fn:poster2235]]"
-            "[[fn:esmogi_qol_presentation]]"
-        ),
-        reason="原文将相关次要终点描述为待后续公布，现已有可核验公开数据，需更新状态为已公布。",
-    ),
-    ParagraphPatch(
-        label="Q26",
-        anchor="目前正在进一步分析可能在今后的大会上提出的数据。",
-        replacement=(
-            "除基线分层外，基于CA 19-9的事后分析结果已公布。以ITT人群为例，"
-            "在基线CA 19-9 >37 U/mL亚组中，TTFields+GnP较GnP的中位OS为16.1 vs 14.1个月"
-            "（HR 0.78，p=0.021）；在8周CA 19-9下降>50%亚组中为18.6 vs 14.7个月"
-            "（HR 0.74，p=0.028）。在mITT人群中，对应亚组也观察到一致趋势"
-            "（分别为HR 0.75，p=0.019；HR 0.71，p=0.019）。[[fn:poster2235]]"
-        ),
-        reason="原文为未来分析表述，现已发布CA 19-9分层事后分析具体数值，需替换为实测结果。",
-    ),
-    ParagraphPatch(
-        label="Q29",
-        anchor="总生存期是肿瘤学试验的金标准。",
-        replacement=(
-            "总生存期是肿瘤学试验的金标准。PANOVA-3中，ITT人群OS为16.2 vs 14.2个月"
-            "（HR 0.82，p=0.039）；远处PFS事后分析为13.9 vs 11.5个月（HR 0.74，p=0.022）。"
-            "同时，总体PFS和局部PFS未显示显著改善。"
-            "[[fn:jco2025]]"
-        ),
-        reason="该题核心是解释OS与PFS差异，需补入主文已给出的OS与远处PFS定量结果。",
-    ),
-    ParagraphPatch(
-        label="Q31",
-        anchor="TTFields 已经确立的对肿瘤细胞的物理作用方式是抑制有丝分裂，这是局部的。",
-        replacement=(
-            "TTFields的物理作用位点在局部肿瘤区域。临床上，PANOVA-3报告远处PFS事后分析"
-            "获益（13.9 vs 11.5个月；HR 0.74，p=0.022），且前3个月设备使用率≥50%的患者"
-            "OS更长（ITT：17.1 vs 14.2个月，HR 0.71，p=0.003）。[[fn:jco2025]]"
-            "[[fn:poster2235]]"
-        ),
-        reason="原文仅停留在作用机制层面，需补充已公布的远处控制与依从性相关临床证据。",
-    ),
-    ParagraphPatch(
-        label="Q35",
-        anchor="Novocure 正在评估可能在未来会议上提交的数据。",
-        replacement=(
-            "相关事后亚组结果已公布。按前3个月设备使用率分层：ITT中使用率≥50%的患者OS为"
-            "17.1 vs 14.2个月（HR 0.71，p=0.003），mITT为17.8 vs 15.1个月（HR 0.77，"
-            "p=0.034）。按CA 19-9分层：例如ITT中8周下降>50%亚组OS为18.6 vs 14.7个月"
-            "（HR 0.74，p=0.028），mITT为19.2 vs 14.7个月（HR 0.71，p=0.019）。"
-            "[[fn:poster2235]]"
-        ),
-        reason="原文写为尚在评估，现亚组结果已正式发布并有HR/p值，需更新为已发布结论。",
-    ),
-    ParagraphPatch(
-        label="Q10",
-        anchor="可切除率定义为在疾病进展前，由多学科团队（包括至少一名外科医生、一名肿瘤内科医生和一名放射科医生）认为肿瘤可切除的患者百分比。",
-        replacement=(
-            "可切除率是PANOVA-3的预设次要终点之一。当前可核验公开全文未提供“是否集中影像"
-            "评审”和“两组可切除率效应值”的可直接引用原句，暂无法补充定量更新。"
-            "[[fn:jco2025]][[fn:poster2235]]"
-        ),
-        reason="该题涉及可切除率评估方法；公开全文无新增可直接引用的定量细节，需改为证据边界声明。",
-    ),
-    ParagraphPatch(
-        label="Q37",
-        anchor="PANOVA-3 的安全性数据表明，TTFields通常耐受良好。",
-        replacement=(
-            "PANOVA-3安全性数据显示TTFields总体耐受良好。最常见器械相关不良事件为轻中度"
-            "皮肤事件；≥3级器械相关AE发生率为7.7%；未见新增系统性安全信号。[[fn:jco2025]]"
-        ),
-        reason="补入主文已公布的关键安全性数值，避免仅保留笼统“耐受良好”表述。",
-    ),
-    ParagraphPatch(
-        label="Q38",
-        anchor="使用 TTFields 治疗后整体健康状况改善。",
-        replacement=(
-            "QoL和疼痛相关结果已公布。与GnP单药相比，TTFields+GnP延长无痛恶化生存"
-            "（15.2 vs 9.1个月；HR 0.74，p=0.027）；延长疼痛量表恶化时间（QLQ-C30 pain："
-            "10.1 vs 7.4个月，HR 0.70，p=0.003；PAN26 pancreatic pain：14.7 vs 10.2个月，"
-            "HR 0.69，p=0.006）；全局健康状态恶化时间7.1 vs 5.7个月（HR 0.77，p=0.023）；"
-            "首次阿片使用时间ITT为9.3 vs 6.7个月（HR 0.73，p=0.014），mITT为7.1 vs 5.4个月"
-            "（HR 0.80，p=0.046）。"
-            "[[fn:jco2025]][[fn:esmogi_qol_presentation]]"
-        ),
-        reason="原文未覆盖QoL与疼痛终点的已发布定量结果，需更新为可引用的终点数据。",
-    ),
-    ParagraphPatch(
-        label="Q39",
-        anchor="建议患者每月至少使用 TTFields 疗法 75% 的时间(平均每天 18 小时)。",
-        replacement=(
-            "建议患者每月至少使用TTFields疗法75%的时间（平均每天18小时）。PANOVA-3中位"
-            "日使用率为62.1%（约15小时/日），中位治疗持续27.6周。前3个月设备使用率≥50%"
-            "的患者OS更长（ITT：17.1 vs 14.2个月，HR 0.71，p=0.003；mITT：17.8 vs "
-            "15.1个月，HR 0.77，p=0.034）。"
-            "[[fn:jco2025]][[fn:poster2235]]"
-        ),
-        reason="该题涉及依从性与疗效关系，现已有使用率分层与OS结果，需补入已发布数据。",
-    ),
-    ParagraphPatch(
-        label="Q40",
-        anchor="目前，没有 PANOVA-3 试验的这些数据。",
-        replacement=(
-            "目前已有相关数据：事后分析显示，前3个月设备使用率≥50%的患者OS更长（ITT："
-            "17.1 vs 14.2个月，HR 0.71，p=0.003；mITT：17.8 vs 15.1个月，HR 0.77，"
-            "p=0.034）。该结论来自事后分析。[[fn:poster2235]]"
-        ),
-        reason="原文声称无数据，但相关事后分析已发布，需由“无数据”改为“有数据且为事后分析”。",
-    ),
-    ParagraphPatch(
-        label="Q39b",
-        anchor="中位每日器械使用率为62.1%（0–99.0%；相当于近15 h），PANOVA-3中 TTFields 治疗使用的中位（范围）持续时间为27.6(0.1–234.4) 周。目前正在分析使用和获益之间的关系，并可能在未来的大会上报告。",
-        replacement=(
-            "中位每日器械使用率为62.1%（0–99.0%；约15 h/日），TTFields治疗中位持续时间"
-            "为27.6（0.1–234.4）周。该“使用率-获益”关系已在后续分析中公布：前3个月"
-            "使用率≥50%与更长OS相关（ITT：HR 0.71，p=0.003；mITT：HR 0.77，p=0.034）。"
-            "[[fn:jco2025]][[fn:poster2235]]"
-        ),
-        reason="该段原文为“正在分析”，现已有发布结果，需改为已公布并给出关键效应值。",
-    ),
-    ParagraphPatch(
-        label="Q43",
-        anchor="PANOVA-3 研究人群是局部晚期不可切除的胰腺癌的患者。",
-        replacement=(
-            "PANOVA-3研究人群为局部晚期不可切除胰腺腺癌（LA-PAC）。在美国，FDA已于"
-            "2026年2月12日批准Optune Pax（TTFields）联合吉西他滨+白蛋白结合型紫杉醇"
-            "用于成人LA-PAC。"
-            "[[fn:jco2025]][[fn:fda_approval]]"
-        ),
-        reason="新增监管状态变化（FDA批准）会影响适用人群解读，需更新监管口径与日期。",
-    ),
-    ParagraphPatch(
-        label="Q46",
-        anchor="目前的标准治疗是化疗-吉西他滨联合白蛋白结合型紫杉醇，或 FOLFIRINOX",
-        replacement=(
-            "目前局部晚期胰腺癌系统治疗仍以化疗方案为基础（如GnP、FOLFIRINOX）。在美国，"
-            "自2026年2月12日起，FDA已批准TTFields（Optune Pax）联合GnP用于成人LA-PAC。"
-            "其他地区以当地审批和指南更新为准。"
-            "[[fn:46]][[fn:fda_approval]]"
-        ),
-        reason="标准治疗表述需纳入美国新增批准事实并保持地区差异说明，避免口径过时。",
-    ),
-]
-
-
-FN_PATTERN = re.compile(r"\[\[fn:([a-zA-Z0-9_]+)\]\]")
+# Replacement token syntax:
+# - [[fn:key]]   -> create/use new footnote mapped by key in patch spec
+# - [[fnid:123]] -> reference existing footnote id in source document
+TOKEN_PATTERN = re.compile(r"\[\[(fn|fnid):([A-Za-z0-9_]+)\]\]")
 
 
 def paragraph_text(paragraph: ET.Element) -> str:
     return "".join((node.text or "") for node in paragraph.iter(qn("t")))
 
 
-def collect_used_footnote_keys(patches: Iterable[ParagraphPatch]) -> List[str]:
+def _normalize_match_mode(raw: str | None) -> str:
+    mode = (raw or "contains").strip().lower()
+    if mode not in {"contains", "exact"}:
+        raise ValueError(f"Unsupported match mode: {raw}")
+    return mode
+
+
+def _matches(text: str, needle: str, mode: str) -> bool:
+    return text == needle if mode == "exact" else needle in text
+
+
+def _prev_non_empty_text(paragraphs: List[ET.Element], idx: int) -> str:
+    for i in range(idx - 1, -1, -1):
+        candidate = paragraph_text(paragraphs[i]).strip()
+        if candidate:
+            return candidate
+    return ""
+
+
+def _find_patch_target(paragraphs: List[ET.Element], patch: ParagraphPatch) -> Tuple[ET.Element, int, str]:
+    candidates: List[Tuple[int, ET.Element, str]] = []
+    for idx, para in enumerate(paragraphs):
+        text = paragraph_text(para)
+        if _matches(text, patch.anchor, patch.anchor_match):
+            question_text = _prev_non_empty_text(paragraphs, idx)
+            candidates.append((idx, para, question_text))
+
+    if patch.question_anchor:
+        candidates = [
+            c
+            for c in candidates
+            if _matches(c[2], patch.question_anchor, patch.question_match)
+        ]
+
+    if len(candidates) == 0:
+        suffix = ""
+        if patch.question_anchor:
+            suffix = f" and question_anchor={patch.question_anchor!r}"
+        raise ValueError(
+            f"Patch {patch.label} did not match any paragraph "
+            f"for anchor={patch.anchor!r}{suffix}"
+        )
+
+    if len(candidates) > 1:
+        preview = ", ".join(str(c[0]) for c in candidates[:8])
+        raise ValueError(
+            f"Patch {patch.label} matched multiple paragraphs ({len(candidates)}): {preview}. "
+            "Refine anchor/question_anchor or use exact match mode."
+        )
+
+    idx, para, question_text = candidates[0]
+    return para, idx, question_text
+
+
+def load_patch_spec(path: Path) -> Tuple[List[ParagraphPatch], Dict[str, str]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    patch_items = payload.get("patches", [])
+    if not isinstance(patch_items, list) or not patch_items:
+        raise ValueError("patch-spec must contain non-empty list field: patches")
+
+    footnote_sources = payload.get("footnote_sources", {})
+    if not isinstance(footnote_sources, dict):
+        raise ValueError("patch-spec field footnote_sources must be an object")
+    source_texts: Dict[str, str] = {}
+    for key, value in footnote_sources.items():
+        source_texts[str(key)] = str(value)
+
+    patches: List[ParagraphPatch] = []
+    for item in patch_items:
+        if not isinstance(item, dict):
+            raise ValueError("Each patch in patch-spec must be an object")
+        patch = ParagraphPatch(
+            label=str(item.get("label", "")).strip(),
+            anchor=str(item.get("anchor", "")),
+            replacement=str(item.get("replacement", "")),
+            reason=str(item.get("reason", "")).strip(),
+            anchor_match=_normalize_match_mode(item.get("anchor_match")),
+            question_anchor=(
+                str(item.get("question_anchor")).strip() if item.get("question_anchor") is not None else None
+            ),
+            question_match=_normalize_match_mode(item.get("question_match")),
+        )
+        patches.append(patch)
+
+    return patches, source_texts
+
+
+def tokenize_replacement(replacement: str) -> List[Tuple[str, str]]:
+    tokens: List[Tuple[str, str]] = []
+    pos = 0
+    for match in TOKEN_PATTERN.finditer(replacement):
+        if match.start() > pos:
+            tokens.append(("text", replacement[pos : match.start()]))
+        token_type, token_val = match.group(1), match.group(2)
+        if token_type == "fn":
+            tokens.append(("footnote_new", token_val))
+        else:
+            tokens.append(("footnote_existing", token_val))
+        pos = match.end()
+    if pos < len(replacement):
+        tokens.append(("text", replacement[pos:]))
+    return tokens
+
+
+def collect_used_footnote_keys(patches: Iterable[ParagraphPatch], source_texts: Dict[str, str]) -> List[str]:
     order: List[str] = []
     seen = set()
     for patch in patches:
-        for key in FN_PATTERN.findall(patch.replacement):
-            if key == "46":
+        for kind, value in tokenize_replacement(patch.replacement):
+            if kind != "footnote_new":
                 continue
-            if key not in FOOTNOTE_SOURCES:
-                raise KeyError(f"Unknown footnote key in replacement text: {key}")
-            if key not in seen:
-                seen.add(key)
-                order.append(key)
+            if value not in source_texts:
+                raise KeyError(
+                    f"Patch {patch.label} references unknown footnote key: {value}. "
+                    "Add it to footnote_sources in patch-spec."
+                )
+            if value not in seen:
+                seen.add(value)
+                order.append(value)
     return order
 
 
-def assert_patch_policy(patches: Iterable[ParagraphPatch]) -> None:
+def assert_patch_policy(
+    patches: Iterable[ParagraphPatch],
+    source_texts: Dict[str, str],
+    existing_footnote_ids: set[int],
+) -> None:
+    seen_labels = set()
     for patch in patches:
-        if not patch.reason.strip():
+        if not patch.label:
+            raise ValueError("Every patch must include a non-empty label")
+        if patch.label in seen_labels:
+            raise ValueError(f"Duplicate patch label detected: {patch.label}")
+        seen_labels.add(patch.label)
+
+        if not patch.anchor:
+            raise ValueError(f"Patch {patch.label} has empty anchor")
+        if not patch.replacement.strip():
+            raise ValueError(f"Patch {patch.label} has empty replacement")
+        if not patch.reason:
             raise ValueError(f"Patch {patch.label} has empty reason")
-        keys = [k for k in FN_PATTERN.findall(patch.replacement) if k != "46"]
-        if not keys:
-            raise ValueError(f"Patch {patch.label} has no verifiable source footnote key")
+
+        tokens = tokenize_replacement(patch.replacement)
+        source_ref_count = 0
+        for kind, value in tokens:
+            if kind == "footnote_new":
+                source_ref_count += 1
+                if value not in source_texts:
+                    raise ValueError(
+                        f"Patch {patch.label} references unknown footnote key: {value}. "
+                        "Define it under footnote_sources in patch-spec."
+                    )
+            elif kind == "footnote_existing":
+                source_ref_count += 1
+                if not value.isdigit():
+                    raise ValueError(
+                        f"Patch {patch.label} has non-numeric existing footnote id: {value}"
+                    )
+                if int(value) not in existing_footnote_ids:
+                    raise ValueError(
+                        f"Patch {patch.label} references missing existing footnote id: {value}"
+                    )
+
+        if source_ref_count == 0:
+            raise ValueError(f"Patch {patch.label} has no verifiable source footnote reference")
 
 
 def max_footnote_id(footnotes_root: ET.Element) -> int:
@@ -283,6 +237,32 @@ def max_footnote_id(footnotes_root: ET.Element) -> int:
         if value >= 0:
             ids.append(value)
     return max(ids) if ids else 0
+
+
+def existing_footnote_ids(footnotes_root: ET.Element) -> set[int]:
+    out: set[int] = set()
+    for fn in footnotes_root.findall(qn("footnote")):
+        raw = fn.get(qn("id"))
+        if raw is None:
+            continue
+        if raw.lstrip("-").isdigit():
+            value = int(raw)
+            if value >= 0:
+                out.add(value)
+    return out
+
+
+def footnote_text_map(footnotes_root: ET.Element) -> Dict[int, str]:
+    out: Dict[int, str] = {}
+    for fn in footnotes_root.findall(qn("footnote")):
+        raw = fn.get(qn("id"))
+        if raw is None or not raw.lstrip("-").isdigit():
+            continue
+        fid = int(raw)
+        if fid < 0:
+            continue
+        out[fid] = "".join((node.text or "") for node in fn.iter(qn("t"))).strip()
+    return out
 
 
 def add_footnote(footnotes_root: ET.Element, footnote_id: int, text: str) -> None:
@@ -346,19 +326,6 @@ def tracked_change_counts(document_root: ET.Element) -> Tuple[int, int]:
     return ins_count, del_count
 
 
-def tokenize_replacement(replacement: str) -> List[Tuple[str, str]]:
-    tokens: List[Tuple[str, str]] = []
-    pos = 0
-    for match in FN_PATTERN.finditer(replacement):
-        if match.start() > pos:
-            tokens.append(("text", replacement[pos : match.start()]))
-        tokens.append(("footnote", match.group(1)))
-        pos = match.end()
-    if pos < len(replacement):
-        tokens.append(("text", replacement[pos:]))
-    return tokens
-
-
 def make_regular_run(parent: ET.Element, text: str) -> None:
     r = ET.SubElement(parent, qn("r"))
     r_pr = ET.SubElement(r, qn("rPr"))
@@ -388,7 +355,7 @@ def make_footnote_ref_run(parent: ET.Element, footnote_id: int) -> None:
 def apply_tracked_replacement(
     paragraph: ET.Element,
     new_tokens: List[Tuple[str, str]],
-    footnote_id_map: Dict[str, int],
+    new_footnote_id_map: Dict[str, int],
     change_id_start: int,
     author: str,
     date_iso: str,
@@ -429,11 +396,10 @@ def apply_tracked_replacement(
         if kind == "text":
             if value:
                 make_regular_run(inserted, value)
-        elif kind == "footnote":
-            if value == "46":
-                make_footnote_ref_run(inserted, 46)
-            else:
-                make_footnote_ref_run(inserted, footnote_id_map[value])
+        elif kind == "footnote_new":
+            make_footnote_ref_run(inserted, new_footnote_id_map[value])
+        elif kind == "footnote_existing":
+            make_footnote_ref_run(inserted, int(value))
         else:
             raise ValueError(f"Unsupported token kind: {kind}")
 
@@ -463,10 +429,11 @@ def write_docx_with_replacements(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Update PANOVA FAQ DOCX with tracked revisions.")
+    parser = argparse.ArgumentParser(description="Apply generic evidence-gated tracked revisions to DOCX.")
     parser.add_argument("--input-docx", required=True, type=Path)
     parser.add_argument("--output-docx", type=Path, default=None)
     parser.add_argument("--copy-to", type=Path, default=None, help="Optional second output path.")
+    parser.add_argument("--patch-spec", required=True, type=Path, help="JSON revision plan and source footnotes")
     parser.add_argument(
         "--run-dir",
         type=Path,
@@ -505,6 +472,10 @@ def main() -> int:
     if not args.input_docx.exists():
         print(f"Input docx not found: {args.input_docx}", file=sys.stderr)
         return 1
+    if not args.patch_spec.exists():
+        print(f"Patch spec not found: {args.patch_spec}", file=sys.stderr)
+        return 1
+
     args.output_docx.parent.mkdir(parents=True, exist_ok=True)
     if args.audit_csv is not None:
         audit_csv = args.audit_csv
@@ -513,9 +484,15 @@ def main() -> int:
     else:
         audit_csv = args.output_docx.with_name(f"{args.output_docx.stem}_change_audit.csv")
 
+    patches, source_texts = load_patch_spec(args.patch_spec)
+
     document_root = load_xml_from_docx(args.input_docx, "word/document.xml")
     footnotes_root = load_xml_from_docx(args.input_docx, "word/footnotes.xml")
-    assert_patch_policy(PATCHES)
+
+    existing_ids = existing_footnote_ids(footnotes_root)
+    existing_text_map = footnote_text_map(footnotes_root)
+    assert_patch_policy(patches, source_texts, existing_ids)
+
     ins_count, del_count = tracked_change_counts(document_root)
     if (ins_count > 0 or del_count > 0) and not args.allow_incremental:
         print(
@@ -527,12 +504,12 @@ def main() -> int:
         )
         return 3
 
-    used_keys = collect_used_footnote_keys(PATCHES)
+    used_keys = collect_used_footnote_keys(patches, source_texts)
     next_fn_id = max_footnote_id(footnotes_root) + 1
-    fn_id_map: Dict[str, int] = {}
+    new_fn_id_map: Dict[str, int] = {}
     for key in used_keys:
-        fn_id_map[key] = next_fn_id
-        add_footnote(footnotes_root, next_fn_id, FOOTNOTE_SOURCES[key])
+        new_fn_id_map[key] = next_fn_id
+        add_footnote(footnotes_root, next_fn_id, source_texts[key])
         next_fn_id += 1
 
     body = document_root.find(qn("body"))
@@ -545,44 +522,41 @@ def main() -> int:
     applied_labels: List[str] = []
     audit_rows: List[Dict[str, str]] = []
 
-    for patch in PATCHES:
-        target = None
-        target_idx = -1
-        for p in paragraphs:
-            if patch.anchor in paragraph_text(p):
-                target = p
-                target_idx = paragraphs.index(p)
-                break
-        if target is None:
-            print(f"Patch anchor not found for {patch.label}: {patch.anchor}", file=sys.stderr)
-            return 2
-        question_text = ""
-        for i in range(target_idx - 1, -1, -1):
-            prev_text = paragraph_text(paragraphs[i]).strip()
-            if prev_text:
-                question_text = prev_text
-                break
+    for patch in patches:
+        target, _target_idx, question_text = _find_patch_target(paragraphs, patch)
         tokens = tokenize_replacement(patch.replacement)
         cursor_change_id = apply_tracked_replacement(
             paragraph=target,
             new_tokens=tokens,
-            footnote_id_map=fn_id_map,
+            new_footnote_id_map=new_fn_id_map,
             change_id_start=cursor_change_id,
             author=args.author,
             date_iso=args.date,
         )
         applied_labels.append(patch.label)
-        source_keys = [k for k in FN_PATTERN.findall(patch.replacement) if k != "46"]
-        source_ids = [str(fn_id_map[k]) for k in source_keys if k in fn_id_map]
-        source_details = [FOOTNOTE_SOURCES[k] for k in source_keys if k in FOOTNOTE_SOURCES]
+
+        source_refs: List[str] = []
+        source_ids: List[str] = []
+        source_details: List[str] = []
+        for kind, value in tokens:
+            if kind == "footnote_new":
+                source_refs.append(f"fn:{value}")
+                source_ids.append(str(new_fn_id_map[value]))
+                source_details.append(source_texts[value])
+            elif kind == "footnote_existing":
+                fid = int(value)
+                source_refs.append(f"fnid:{fid}")
+                source_ids.append(str(fid))
+                source_details.append(existing_text_map.get(fid, ""))
+
         audit_rows.append(
             {
                 "Patch_Label": patch.label,
                 "Question": question_text,
                 "Reason_One_Sentence": patch.reason,
-                "Source_Keys": ",".join(source_keys),
+                "Source_Refs": ",".join(source_refs),
                 "Source_Footnote_IDs": ",".join(source_ids),
-                "Source_Details": " | ".join(source_details),
+                "Source_Details": " | ".join([d for d in source_details if d]),
             }
         )
 
@@ -596,7 +570,7 @@ def main() -> int:
                 "Patch_Label",
                 "Question",
                 "Reason_One_Sentence",
-                "Source_Keys",
+                "Source_Refs",
                 "Source_Footnote_IDs",
                 "Source_Details",
             ],
@@ -612,7 +586,7 @@ def main() -> int:
     print("Output:", args.output_docx)
     if args.copy_to:
         print("Copy:", args.copy_to)
-    print("New footnotes:", {k: fn_id_map[k] for k in used_keys})
+    print("New footnotes:", {k: new_fn_id_map[k] for k in used_keys})
     print("Change audit:", audit_csv)
     return 0
 

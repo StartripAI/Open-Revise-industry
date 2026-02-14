@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -16,6 +17,14 @@ from typing import Dict, List, Tuple
 from run_artifact_utils import is_valid_run_id
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+QUESTION_PREFIX_RE = re.compile(
+    r"^\s*(?:Q\s*\d+|Question\s*\d+|\d+[\.\)]|[一二三四五六七八九十]+[、\.])\s*",
+    re.IGNORECASE,
+)
+QUESTION_HINT_RE = re.compile(
+    r"(?:\?|？|what|how|why|when|where|which|who|whether|是否|如何|为什么|什么|哪|谁|何时|多少)",
+    re.IGNORECASE,
+)
 
 
 def _read_docx_xml(docx_path: Path, name: str) -> ET.Element:
@@ -28,9 +37,14 @@ def _paragraph_text(p: ET.Element) -> str:
 
 
 def _is_question(text: str) -> bool:
-    if len(text) < 6:
+    stripped = text.strip()
+    if len(stripped) < 6:
         return False
-    return text.endswith("？") or text.endswith("?")
+    if stripped.endswith("？") or stripped.endswith("?"):
+        return True
+    if QUESTION_PREFIX_RE.match(stripped) and QUESTION_HINT_RE.search(stripped):
+        return True
+    return False
 
 
 def _extract_footnotes_map(footnotes_root: ET.Element) -> Dict[int, str]:

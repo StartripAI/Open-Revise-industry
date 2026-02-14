@@ -200,6 +200,15 @@ def run_check(
     cfg = json.loads(config_path.read_text(encoding="utf-8"))
     required = cfg.get("required_sources", {})
     optional = cfg.get("optional_sources", {})
+    if not isinstance(required, dict) or not isinstance(optional, dict):
+        raise ValueError("Config fields required_sources and optional_sources must be objects")
+    if len(required) == 0:
+        return {
+            "all_required_passed": False,
+            "required_failed_count": 1,
+            "config_error": "required_sources is empty; configure at least one required source",
+            "results": [],
+        }
 
     results: List[CheckResult] = []
     for source_id, spec in required.items():
@@ -281,11 +290,19 @@ def main() -> int:
         args.output_json = args.run_dir / "reports" / f"source_gate_report_{args.run_id}.json"
 
     ca_bundle = str(args.ca_bundle) if args.ca_bundle else None
-    payload = run_check(
-        args.config,
-        ca_bundle=ca_bundle,
-        allow_insecure_tls=args.allow_insecure_tls,
-    )
+    try:
+        payload = run_check(
+            args.config,
+            ca_bundle=ca_bundle,
+            allow_insecure_tls=args.allow_insecure_tls,
+        )
+    except Exception as exc:
+        payload = {
+            "all_required_passed": False,
+            "required_failed_count": 1,
+            "config_error": f"{exc.__class__.__name__}: {exc}",
+            "results": [],
+        }
     out = json.dumps(payload, ensure_ascii=False, indent=2)
     print(out)
     if args.output_json:

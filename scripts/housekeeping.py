@@ -9,13 +9,14 @@ import argparse
 import shutil
 import tarfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from run_artifact_utils import (
     DEFAULT_MARKER,
     PurgeRecord,
     is_valid_run_id,
     parse_run_id_time,
+    read_tsv,
     safe_copy2,
     to_iso_z,
     utc_now,
@@ -27,26 +28,41 @@ from update_run_index import upsert_run_record
 DELETED_FIELDS = ["marker", "run_id", "reason", "status_before", "status_after", "path", "deleted_at"]
 
 
-def _collect_run_dirs(runs_root: Path, only_run_id: str | None) -> List[Path]:
-    dirs: List[Path] = []
-    if not runs_root.exists():
-        return dirs
+def _collect_run_ids(
+    runs_root: Path,
+    archive_dir: Path,
+    run_index_path: Path,
+    only_run_id: str | None,
+) -> List[str]:
+    ids: Set[str] = set()
+
     if only_run_id:
-        p = runs_root / only_run_id
-        if p.is_dir():
-            return [p]
-        return []
-    for p in sorted(runs_root.iterdir()):
-        if p.is_dir() and is_valid_run_id(p.name):
-            dirs.append(p)
-    return dirs
+        if is_valid_run_id(only_run_id):
+            ids.add(only_run_id)
+        return sorted(ids)
+
+    if runs_root.exists():
+        for p in runs_root.iterdir():
+            if p.is_dir() and is_valid_run_id(p.name):
+                ids.add(p.name)
+
+    if archive_dir.exists():
+        for p in archive_dir.glob("*.tar.gz"):
+            run_id = p.name[: -len(".tar.gz")]
+            if is_valid_run_id(run_id):
+                ids.add(run_id)
+
+    for row in read_tsv(run_index_path):
+        run_id = row.get("run_id", "")
+        if is_valid_run_id(run_id):
+            ids.add(run_id)
+
+    return sorted(ids)
 
 
 def _archive_run(run_dir: Path, archive_path: Path, dry_run: bool) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
-    if archive_path.exists():
-        return
-    if dry_run:
+    if archive_path.exists() or dry_run:
         return
     with tarfile.open(archive_path, "w:gz") as tf:
         tf.add(run_dir, arcname=run_dir.name)
@@ -107,57 +123,60 @@ def main() -> int:
 
     now = utc_now()
     now_iso = to_iso_z(now)
-    runs = _collect_run_dirs(args.runs_root, args.run_id)
+    run_index = args.reports_dir / "run_index.tsv"
+    run_ids = _collect_run_ids(args.runs_root, args.archive_dir, run_index, args.run_id)
+
     deleted_rows: List[Dict[str, str]] = []
     purge_records: List[PurgeRecord] = []
-    run_index = args.reports_dir / "run_index.tsv"
 
-    for run_dir in runs:
-        run_id = run_dir.name
+    for run_id in run_ids:
+        run_dir = args.runs_root / run_id
+        archive_path = args.archive_dir / f"{run_id}.tar.gz"
         started = parse_run_id_time(run_id)
         age_days = (now - started).days
-        archive_path = args.archive_dir / f"{run_id}.tar.gz"
 
         if args.hot_days < age_days <= args.cold_days:
-            _archive_run(run_dir, archive_path, args.dry_run)
-            _copy_permanent(run_dir, args.reports_dir, args.dry_run)
-            purge_records.append(
-                PurgeRecord(
-                    path=run_dir,
-                    reason="cold_archive_migration",
-                    pre_state="exists",
-                    post_state="archived_or_removed",
-                    approved_by=args.approved_by,
+            if run_dir.exists():
+                _archive_run(run_dir, archive_path, args.dry_run)
+                _copy_permanent(run_dir, args.reports_dir, args.dry_run)
+                purge_records.append(
+                    PurgeRecord(
+                        path=run_dir,
+                        reason="cold_archive_migration",
+                        pre_state="exists",
+                        post_state="archived_or_removed",
+                        approved_by=args.approved_by,
+                    )
                 )
-            )
-            deleted_rows.append(
-                {
-                    "marker": args.marker,
-                    "run_id": run_id,
-                    "reason": "cold_archive_migration",
-                    "status_before": "exists",
-                    "status_after": "archived_or_removed",
-                    "path": str(run_dir),
-                    "deleted_at": now_iso,
-                }
-            )
-            if not args.dry_run:
-                shutil.rmtree(run_dir)
-            upsert_run_record(
-                run_index,
-                {
-                    "marker": args.marker,
-                    "run_id": run_id,
-                    "status": "COLD_ARCHIVED",
-                    "archive_path": str(archive_path),
-                    "notes": f"migrated to archive at {now_iso}",
-                    "retention_policy": args.retention_policy,
-                },
-            )
+                deleted_rows.append(
+                    {
+                        "marker": args.marker,
+                        "run_id": run_id,
+                        "reason": "cold_archive_migration",
+                        "status_before": "exists",
+                        "status_after": "archived_or_removed",
+                        "path": str(run_dir),
+                        "deleted_at": now_iso,
+                    }
+                )
+                if not args.dry_run:
+                    shutil.rmtree(run_dir)
+                upsert_run_record(
+                    run_index,
+                    {
+                        "marker": args.marker,
+                        "run_id": run_id,
+                        "status": "COLD_ARCHIVED",
+                        "archive_path": str(archive_path),
+                        "notes": f"migrated to archive at {now_iso}",
+                        "retention_policy": args.retention_policy,
+                    },
+                )
             continue
 
         if age_days > args.cold_days:
             run_has_purge = False
+
             if run_dir.exists():
                 removed = _purge_non_key_dirs(run_dir, args.dry_run)
                 for item in removed:
@@ -182,6 +201,7 @@ def main() -> int:
                             "deleted_at": now_iso,
                         }
                     )
+
             if archive_path.exists():
                 run_has_purge = True
                 purge_records.append(
@@ -235,7 +255,7 @@ def main() -> int:
     if not args.dry_run:
         write_tsv(deleted_manifest, DELETED_FIELDS, deleted_rows)
 
-    print(f"Processed runs: {len(runs)}")
+    print(f"Processed runs: {len(run_ids)}")
     print(f"Purge actions: {len(purge_records)}")
     if args.dry_run:
         print("Dry-run mode: no file changes were made")

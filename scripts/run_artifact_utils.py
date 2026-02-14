@@ -8,8 +8,10 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import hashlib
+import os
 import re
 import secrets
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List
@@ -106,11 +108,24 @@ def sha256_file(path: Path) -> str:
 
 def write_tsv(path: Path, fieldnames: List[str], rows: Iterable[Dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in fieldnames})
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent),
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter="\t")
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({k: row.get(k, "") for k in fieldnames})
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def read_tsv(path: Path) -> List[Dict[str, str]]:
@@ -128,4 +143,3 @@ def safe_copy2(src: Path, dst: Path) -> None:
     if dst.exists():
         raise FileExistsError(f"Refusing to overwrite existing file: {dst}")
     shutil.copy2(src, dst)
-
